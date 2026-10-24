@@ -10,6 +10,8 @@ dex 结构特征做内证分析。
 
 ```bash
 python -m pip install -r requirements.txt
+# 下载类工具(apkpure_dl/apkmirror_dl)如需代理:
+#   set APKTOOL_PROXY=socks5h://127.0.0.1:7891   (Windows)  /  export APKTOOL_PROXY=...
 ```
 
 ## 工具一览
@@ -77,6 +79,8 @@ python xref_field.py base.apk 'a3;->b1'
 - androguard 按方法名反汇编大 dex 约需 1-2 分钟；`dexdiff.py`/`dexdeep.py`/`mapdiff.py`
   是纯标准库的秒级替代，先用它们初筛再上重炮。
 - Git Bash 里给这些脚本传 `/tmp/...` 路径会在沙箱里失联，请使用真实盘符路径或工作区相对路径。
+- 目录里的 `smali.jar`/`baksmali.jar`（若存在）是可选的 smali 往返工具
+  （maven: org.smali/smali、org.smali/baksmali），验证 dex 可编译性时有用，不参与本工具箱流程。
 
 ## 实战结论速查
 
