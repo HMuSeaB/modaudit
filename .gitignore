@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+
+# androguard 会话缓存
+androguard.db
+
+# 第三方 jar(smali/baksmali, 见 README)
+*.jar
+
+# 临时/工作产物
+temp_*.dex
+*.apk
+*.apks
+*.apkm
+*.xapk
+audits/
+official/
+baseline/
+
+# 研究记录(按需发布; 默认不进仓库)
+_apkresearch/
