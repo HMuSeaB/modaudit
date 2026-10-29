@@ -259,6 +259,9 @@ def view():
         return page(rel or '浏览', f"<div class='card'><table>{items}</table></div>")
     if not os.path.isfile(full):
         return page('错误', f"<div class='card'>文件不存在: {html.escape(rel)}</div>")
+    if full.endswith('.html'):
+        # HTML 文件(如 3D 可视化页面)直接原样呈现
+        return Response(open(full, 'rb').read(), mimetype='text/html')
     text = open(full, encoding='utf-8', errors='replace').read()
     if full.endswith('.md'):
         body = f"<div class='card md'>{md_to_html(text)}</div>"

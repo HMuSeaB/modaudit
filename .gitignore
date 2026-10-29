@@ -20,3 +20,10 @@ baseline/
 
 # 研究记录(按需发布; 默认不进仓库)
 _apkresearch/
+
+# 用户本地的反编译与工具目录(不发布)
+Hark56_src/
+bin/
+jadx_run.log
+sources/
+resources/
