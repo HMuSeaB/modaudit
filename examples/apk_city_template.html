@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>APK 之城 · YouTube 20.44.36 官方 vs 修改版</title>
+<style>
+  body{margin:0;background:#0a0e16;color:#c9d4e0;font-family:"Microsoft YaHei",system-ui;overflow:hidden}
+  #hud{position:fixed;top:14px;left:16px;z-index:10}
+  #hud h1{font-size:17px;margin:0 0 4px;color:#e3ecf5;font-weight:600}
+  #hud .sub{font-size:11px;color:#7b8ea1}
+  #panel{position:fixed;top:14px;right:16px;z-index:10;background:rgba(13,19,29,.85);
+         padding:12px 16px;border-radius:8px;border:1px solid #223146;font-size:12px}
+  #panel b{color:#8fa8c0}
+  #panel label{display:block;margin:4px 0;cursor:pointer;color:#a9bccf}
+  #panel input{vertical-align:middle}
+  #card{position:fixed;bottom:16px;left:16px;width:320px;z-index:11;background:rgba(13,19,29,.92);
+        border:1px solid #223146;border-radius:8px;padding:12px 14px;font-size:12px;display:none}
+  #card .path{font-family:Consolas,monospace;color:#9fe08f;word-break:break-all;margin-bottom:4px}
+  #card .row{margin:3px 0;color:#a9bccf}
+  #legend{position:fixed;bottom:16px;right:16px;z-index:10;font-size:12px;background:rgba(13,19,29,.85);
+          padding:10px 14px;border-radius:8px;border:1px solid #223146}
+  #legend b{color:#8fa8c0}
+  .dot{display:inline-block;width:9px;height:9px;margin-right:6px;vertical-align:middle}
+  #stats{position:fixed;top:120px;right:16px;z-index:10;font-size:12px;color:#7b8ea1;text-align:right}
+</style>
+</head>
+<body>
+<div id="hud"><h1>APK 之城 · YouTube 20.44.36</h1>
+  <div class="sub">每栋楼 = 一个真实文件 · 楼高 = 文件大小 · 红楼 = 被修改 · 线框废墟 = 被裁剪的城区<br>
+  拖拽旋转 / 滚轮缩放 / 右键平移 / 点击建筑看详情</div></div>
+<div id="panel">
+  <b>城区显隐</b>
+  <label><input type=checkbox id=v-exist checked> 现存建筑 (8104)</label>
+  <label><input type=checkbox id=v-ghost checked> 被裁剪的幽灵城区 (7890)</label>
+  <label><input type=checkbox id=v-mod checked> 被修改的 4 栋红楼</label>
+</div>
+<div id="stats"></div>
+<div id="card"></div>
+<div id="legend">
+  <span class="dot" style="background:#7fa8c9"></span><b>与官方一致 (8100)</b><br>
+  <span class="dot" style="background:#ef4444;box-shadow:0 0 8px #ef4444"></span><b>被修改 (4)</b><br>
+  <span class="dot" style="background:#3a4656"></span><b>被裁剪文件的幽灵轮廓 (7890)</b>
+</div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+"three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+const DATA = __DATA__;
+
+// ---------- 程序化布局: 目录 = 城区, 文件 = 楼 ----------
+function districtKey(p){
+  const parts = p.split('/');
+  if (parts[0]==='lib' || parts[0]==='res') return parts[0]+'/'+(parts[1]||'');
+  return parts[0];
+}
+function hash(s){ let h=2166136261; for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);} return (h>>>0)/4294967295; }
+
+const districts = {};
+for (const f of DATA.files){
+  const k = districtKey(f.p);
+  (districts[k] = districts[k] || []).push(f);
+}
+// 城区地块规划: 按楼数排, 大城区在中心, 小城区向外
+const keys = Object.keys(districts).sort((a,b)=>districts[b].length-districts[a].length);
+const COLS = Math.ceil(Math.sqrt(keys.length));
+const districtPos = {};
+const districtSize = {};
+keys.forEach((k,i)=>{
+  const gx = (i%COLS) - (COLS-1)/2, gy = Math.floor(i/COLS) - (COLS-1)/2;
+  const n = districts[k].length;
+  const span = Math.max(30, Math.sqrt(n)*7.5);
+  districtPos[k] = [gx*170, 0, gy*170];
+  districtSize[k] = span;
+});
+
+// 建筑实例化: 存在 / 幽灵 / 红楼 三组
+const exist = [], ghost = [], red = [];
+keys.forEach(k=>{
+  const [dx,dz] = districtPos[k], span = districtSize[k];
+  const rows = Math.ceil(Math.sqrt(districts[k].length));
+  districts[k].forEach((f,j)=>{
+    const row = Math.floor(j/rows), col = j%rows;
+    const x = dx - span/2 + col*(span/rows) + hash(f.p)*2;
+    const z = dz - span/2 + row*(span/rows) + hash(f.p+'|z')*2;
+    const h = Math.max(0.5, Math.log2(1+f.s)*2.4);
+    const w = Math.min(6, 0.8 + Math.sqrt(f.s)/22);
+    const b = {x, z, h, w, f, k};
+    if (f.st==='mod') red.push(b);
+    else if (f.st==='del') ghost.push(b);
+    else exist.push(b);
+  });
+});
+
+function buildMesh(list, opts){
+  const geo = new THREE.BoxGeometry(1,1,1);
+  geo.translate(0, 0.5, 0);   // 底部对齐地面
+  const mat = new THREE.MeshLambertMaterial({color:opts.color, transparent:opts.opacity<1,
+    opacity:opts.opacity, emissive:opts.emissive||0x000000});
+  const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+  const m = new THREE.Matrix4();
+  list.forEach((b,i)=>{
+    m.makeScale(b.w, b.h, b.w);
+    m.setPosition(b.x, 0, b.z);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.userData.files = list;
+  return mesh;
+}
+
+// 场景
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0e16);
+scene.fog = new THREE.Fog(0x0a0e16, 300, 1400);
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.5, 4000);
+camera.position.set(330, 260, 330);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.07;
+controls.maxPolarAngle = Math.PI/2.05;
+
+scene.add(new THREE.HemisphereLight(0x8fb3d9, 0x111820, 0.9));
+const dir = new THREE.DirectionalLight(0xbfd4ea, 0.7); dir.position.set(200,300,120); scene.add(dir);
+
+// 地面
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(2200,2200),
+  new THREE.MeshLambertMaterial({color:0x0d121c}));
+ground.rotation.x = -Math.PI/2; ground.position.y = -0.05; scene.add(ground);
+
+// 现存建筑
+const existMesh = buildMesh(exist, {color:0x7fa8c9, opacity:1});
+scene.add(existMesh);
+// 幽灵城区(线框)
+const ghostMesh = buildMesh(ghost, {color:0x3a4656, opacity:0.28});
+ghostMesh.material.wireframe = true;
+scene.add(ghostMesh);
+// 红楼(被修改)
+const redMesh = buildMesh(red, {color:0xef4444, opacity:1, emissive:0x881111});
+scene.add(redMesh);
+
+// 城区路牌(浮空文字)
+function makeLabel(text, pos, color='#9fb4ca', scale=1){
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 96;
+  const ctx = cv.getContext('2d');
+  ctx.font = '600 40px "Microsoft YaHei", Consolas, sans-serif';
+  ctx.fillStyle = color; ctx.textBaseline = 'middle';
+  ctx.fillText(text, 8, 48);
+  const tex = new THREE.CanvasTexture(cv);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthWrite:false}));
+  sp.scale.set(60*scale, 11.25*scale, 1);
+  sp.position.copy(pos);
+  return sp;
+}
+keys.slice(0, 16).forEach(k=>{
+  const [dx,dz] = districtPos[k];
+  const top = Math.max(...districts[k].map(f=>Math.log2(1+f.s)*2.4)) + 14;
+  scene.add(makeLabel(`${k}  (${districts[k].length})`, new THREE.Vector3(dx, top, dz)));
+});
+
+// 点击拾取(对三组做 raycast, 取最近)
+const ray = new THREE.Raycaster();
+const pointer = new THREE.Vector2(); let downPos = null;
+renderer.domElement.addEventListener('pointerdown', e=>{ downPos = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e=>{
+  if (downPos && Math.hypot(e.clientX-downPos[0], e.clientY-downPos[1]) > 5) return; // 拖拽不算点击
+  pointer.x = (e.clientX/innerWidth)*2-1; pointer.y = -(e.clientY/innerHeight)*2+1;
+  ray.setFromCamera(pointer, camera);
+  const meshes = [redMesh, existMesh, ghostMesh].filter(m=>m.visible);
+  const hit = ray.intersectObjects(meshes)[0];
+  const card = document.getElementById('card');
+  if (hit){
+    const b = hit.object.userData.files[hit.instanceId];
+    const statusCN = {same:'与官方一致', mod:'被修改 ⚠', del:'被裁剪(幽灵)', add:'新增'};
+    card.style.display='block';
+    card.innerHTML = `<div class='path'>${b.f.p.replace(/</g,'&lt;')}</div>
+      <div class='row'>大小: ${b.f.s>=1048576?(b.f.s/1048576).toFixed(2)+' MB':(b.f.s/1024).toFixed(1)+' KB'}</div>
+      <div class='row'>状态: ${statusCN[b.f.st]||b.f.st}</div>
+      <div class='row'>城区: ${b.k.replace(/</g,'&lt;')}</div>`;
+  } else card.style.display='none';
+});
+
+// 显隐
+const vis = {exist:true, ghost:true, mod:true};
+document.getElementById('v-exist').addEventListener('change', e=>{ existMesh.visible = e.target.checked; });
+document.getElementById('v-ghost').addEventListener('change', e=>{ ghostMesh.visible = e.target.checked; });
+document.getElementById('v-mod').addEventListener('change', e=>{ redMesh.visible = e.target.checked; });
+document.getElementById('stats').textContent = `现存 ${exist.length} · 幽灵 ${ghost.length} · 红楼 ${red.length}`;
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+function tick(){
+  requestAnimationFrame(tick);
+  // 红楼呼吸辉光
+  redMesh.material.emissiveIntensity = 0.6 + 0.4*Math.sin(clock.getElapsedTime()*2.2);
+  controls.update();
+  renderer.render(scene, camera);
+}
+tick();
+</script>
+</body>
+</html>
